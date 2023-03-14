@@ -1,0 +1,397 @@
+---
+title: "Machine Learning Models for Predicting House Price of Boston"
+author: "Provakar Ghose" 
+date: "2023-03-14"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+## Introduction & Objective:
+
+The purpose of this project to find the best regression model that could be used for predicting the median value of owner-occupied homes in various suburbs of Boston. I would be using the data set called "BostonHousing_randomized - 9" dataset for this. The BostonHousing_randomized – 9 dataset is a popular dataset used in machine learning for regression tasks. The dataset contains information about different properties of houses in Boston, such as the number of rooms, crime rate, and distance from employment centers, and the target variable is the median value of owner-occupied homes in thousands of dollars. I will be using three regression models - Linear Regression, SVR, and Random Forest Regression model will be applying them to predict the housing prices in Boston. Also, to evaluate and finding best-performing model R-squared and Mean Squared Error (MSE) matrix have been used. 
+
+## Reason for choosing the Models: 
+Linear regression model is  being  used initially to determine what is the best variable when MEDV is the dependent variable. Once the independent variables are determined, i will be using other models for predicting the housing values.
+
+SVR(Support vector regression) can be used for this Boston housing data set as the data is not linear. 
+
+Random forest regression is a powerful machine learning algorithm that is used for a wide range of prediction tasks
+
+## Loading the Libraries:
+
+```{r}
+library(caret)
+library(ggplot2)
+library(caTools)
+library(e1071)
+library(rpart)
+library(randomForest)
+library(dplyr)
+library(readxl)
+```
+
+## Loading the Dataset:
+
+```{r}
+getwd()
+setwd("C:/Users/dibak/Desktop/R Script/DM Mid Project")
+Boston<- read_excel("C:\\Users\\dibak\\Desktop\\R Script\\DM Mid Project\\BostonHousing_randomized_9.xlsx")
+
+```
+## Finding Missing Values in the Dataset:
+
+```{r}
+sum(is.na(Boston))
+```
+We found there is no missing value in our Dataset Boston
+
+## Visualization of Overall Dataset:
+
+```{r}
+ggplot(Boston, aes(x = medv)) +
+  geom_point(aes(y = crim), colour = 'red') +
+  geom_point(aes(y = zn), colour = 'green') +
+  geom_point(aes(y = indus), colour = 'blue') +
+  geom_point(aes(y = chas), colour = 'purple') +
+  geom_point(aes(y = nox), colour = 'orange') +
+  geom_point(aes(y = rm), colour = 'pink') +
+  geom_point(aes(y = age), colour = 'brown') +
+  geom_point(aes(y = dis), colour = 'gray') +
+  geom_point(aes(y = rad), colour = 'yellow') +
+  geom_point(aes(y = tax), colour = 'black') +
+  geom_point(aes(y = ptratio), colour = 'dark green') +
+  geom_point(aes(y = black), colour = 'dark red') +
+  geom_point(aes(y = lstat), colour = 'dark blue') +
+  labs(x = "Median value of owner-occupied homes (MEDV) ", y = "Independent Variables",
+       title = "Overall Dataset Visualization",
+       subtitle = "Boston Housing Dataset")
+```
+
+This visualization illustrate overall data position of our Dataset.
+
+## Correlation Summary :
+
+```{r}
+cor(Boston)
+```
+Above Correlation summary provides us relationship percentage between independent variables and dependent variables. Here "lstat" found with highest positive and "chas" found highest negative correlation with our target variable "medv".
+
+
+## Scatter plot matrix to visualize data Correlation:
+
+# Scatter plot matrix 1:
+
+```{r}
+pairs(data=Boston,~medv+crim+zn+indus+chas+nox+rm+age,
+        main = "Scatter Plot Matrix for Boston Housing Dataset", 
+      upper.panel = NULL, 
+      lower.panel = panel.smooth, 
+      diag.panel = NULL, 
+      pch = 20, 
+      col = "blue", 
+      cex = 0.7)
+```
+# Scatter plot matrix 2:
+
+```{r}
+pairs(data=Boston,~medv+dis+rad+tax+ptratio+black+lstat,
+        main = "Scatter Plot Matrix for Boston Housing Dataset", 
+      upper.panel = NULL, 
+      lower.panel = panel.smooth, 
+      diag.panel = NULL, 
+      pch = 20, 
+      col = "blue", 
+      cex = 0.7)
+```
+
+Scatter plot matrix 1 and 2 used to see correlation of all independent variables with target variable "medv'. Here we found data are highly scattered.
+
+# Checking for Outliers:
+
+```{r}
+# Part 1
+par(mfrow=c(1,7))
+for(i in 1:7) {
+  boxes <- boxplot(Boston[,i], main=names(Boston)[i])}
+
+```
+ 
+```{r}
+# Part 2
+par(mfrow=c(1,7))
+for(i in 8:14) {
+  boxes <- boxplot(Boston[,i], main=names(Boston)[i])}
+```
+
+
+By outliers checking we found independent variables crim, indus, rm, tax, ptratio, and lstat have outliers means data points that are significantly different from the other data points in the dataset. Though they have a significant impact on the statistical analysis of the dataset because they can distort the mean, standard deviation, and other measures of central tendency, in other cases, outliers may be legitimate data points that reflect the true nature of the data, and therefore should not be removed.
+
+## Feature scaling of the Dataset
+
+```{r}
+data_x_vars <- Boston[ , -14]
+data_x_vars_scaled <- as.data.frame(scale(data_x_vars, scale=TRUE, center=TRUE))
+data_scaled <- cbind(data_x_vars_scaled , medv = Boston[ , 14])
+```
+
+
+# Splitting the Dataset by 70-30 ratio
+
+```{r}
+set.seed(42)
+train_index <- createDataPartition(data_scaled$medv, p = 0.7, list = FALSE)
+scaled_train_data <- data_scaled[train_index, ]
+scaled_test_data <- data_scaled[-train_index, ]
+```
+
+In order to identify the best regression model, i would be splitting the data set 70:30 which means  that 70% of the data is used for training the model, while the remaining 30% will be used for testing the model's performance.The reason for choosing this ratio is to ensure that I have enough data to train my model while still having a sufficient amount of data to test it and evaluate its performance. 
+
+## Fitting Regression Models to Dataset:
+
+## Linear Regression Model for variable selection:
+
+```{r}
+lm_model_All <- lm(medv ~ ., data = scaled_train_data)
+summary(lm_model_All)
+```
+# Improving lm Model performance by Removing less significant independent variable (rm):
+
+```{r}
+lm_model_rm <- lm(medv ~ crim+zn+indus+chas+nox+age+dis+rad+tax+ptratio+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_rm)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (crim):
+
+```{r}
+lm_model_crim <- lm(medv ~zn+indus+chas+nox+age+dis+rad+tax+ptratio+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_crim)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (dis):
+
+```{r}
+lm_model_dis <- lm(medv ~zn+indus+chas+nox+age+rad+tax+ptratio+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_dis)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (rad):
+
+```{r}
+lm_model_rad <- lm(medv ~zn+indus+chas+nox+age+tax+ptratio+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_rad)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (ptratio):
+
+```{r}
+lm_model_pt <- lm(medv ~zn+indus+chas+nox+age+tax+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_pt)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (tax):
+
+```{r}
+lm_model_tax <- lm(medv ~zn+indus+chas+nox+age+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_tax)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (nox):
+
+```{r}
+lm_model_nox <- lm(medv ~zn+indus+chas+age+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_nox)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (zn):
+
+```{r}
+lm_model_zn <- lm(medv ~indus+chas+age+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_zn)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (indus):
+
+```{r}
+lm_model_in <- lm(medv ~ chas+age+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_in)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (age):
+
+```{r}
+lm_model_ag <- lm(medv ~ chas+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_ag)
+```
+
+# Improving lm Model performance by Removing less significant independent variable (chas):
+
+```{r}
+lm_model_chas <- lm(medv ~ black+lstat,
+                 data = scaled_train_data)
+summary(lm_model_chas)
+```
+
+In this point we observe after removing independent variable "chas" we found our Adjusted R- squeared value go down than keeping this "chas"  also lstat is the best infulancing variable. So we are selecting independent variables for lm model "chas", "black", and "lstat". Furthermore, We will check other models with those three independent variables.
+
+## Final Linear Regression Model with selected IV:
+
+```{r}
+lm_model <- lm(medv ~ chas+black+lstat,
+                 data = scaled_train_data)
+summary(lm_model)
+lm_pred <- predict(lm_model, newdata = scaled_test_data)
+lm_mse <- mean((lm_pred - scaled_test_data$medv)^2)
+lm_rsquared <- R2(lm_pred, scaled_test_data$medv)
+```
+
+# Visualization of LM model
+
+```{r}
+
+df<-data.frame(Actual=scaled_test_data$medv,
+               Predicted = lm_pred,
+               LSTAT=scaled_test_data$lstat)
+
+ggplot(data=df,aes(x=Actual,y=Predicted))+
+  geom_point()+
+  geom_abline(intercept = 0,slope = 1,linetype=1,color="red",size=1)+
+  labs(x="Actual MEDV", y= "Predicted MEDV")+
+  ggtitle("Actual vs Prediction for Linear Regression Model")
+```
+
+# Visualization with most correlated independent variable
+
+```{r}
+ggplot()+
+  geom_point(data=df,
+             aes(x=LSTAT,y=Predicted, color="Predicted Points"))+
+  geom_point(data=df,
+             aes(x=LSTAT,y=Actual,color="Actual Points"))+
+  geom_line(data=df,
+            aes(x=LSTAT,y=Predicted,color="predicted Line"))+
+  labs(y="Predicted MEDV", x= "LSTAT")
+```
+
+
+## Support Vector Regression Model with selected IV:
+
+```{r}
+svr_model <- svm(medv ~ chas+black+lstat, data = scaled_train_data)
+svr_pred <- predict(svr_model, newdata = scaled_test_data)
+svr_mse <- mean((svr_pred - scaled_test_data$medv)^2)
+svr_rsquared <- R2(svr_pred, scaled_test_data$medv)
+```
+
+
+# Visualizing the SVR Model
+
+```{r}
+dfsvr<-data.frame(Actual=scaled_test_data$medv,
+                  Predicted = svr_pred,
+                  LSTAT=scaled_test_data$lstat)
+
+ggplot(data=dfsvr,aes(x=Actual,y=Predicted))+
+  geom_point()+
+  geom_abline(intercept = 0,slope = 1,linetype=1,color="red",size=1)+
+  labs(x="Actual MEDV", y= "Predicted MEDV")+
+  ggtitle("Actual vs Prediction for SVR Model")
+```
+
+# Visualization with most correlated independent variable:
+
+```{r}
+ggplot()+
+  geom_point(data=dfsvr,
+             aes(x=LSTAT,y=Predicted, color="Predicted Points"))+
+  geom_point(data=dfsvr,
+             aes(x=LSTAT,y=Actual,color="Actual Points"))+
+  geom_line(data=dfsvr,
+            aes(x=LSTAT,y=Predicted,color="predicted Line"))+
+  labs(y="Predicted MEDV", x= "LSTAT")
+```
+
+
+## Random forest Regression Regression Model with selected IV:
+
+```{r}
+rf_model <- randomForest(medv ~ chas+black+lstat, data = scaled_train_data,ntree=500)
+rf_pred <- predict(rf_model, newdata = scaled_test_data)
+rf_mse <- mean((rf_pred - scaled_test_data$medv)^2)
+rf_rsquared <- cor(rf_pred, scaled_test_data$medv)^2
+```
+
+
+# Visualization of Random Forest regression model
+
+```{r}
+dfrf<-data.frame(Actual=scaled_test_data$medv,
+                 Predicted = rf_pred,
+                 LSTAT=scaled_test_data$lstat)
+
+ggplot(data=dfrf,aes(x=Actual,y=Predicted))+
+  geom_point()+
+  geom_abline(intercept = 0,slope = 1,linetype=1,color="red",size=1)+
+  labs(x="Actual MEDV", y= "Predicted MEDV")+
+  ggtitle("Actual vs Prediction for Random Forest Regression model")
+```
+
+# Visualization with most correlated independent variable
+
+```{r}
+ggplot()+
+  geom_point(data=dfrf,
+             aes(x=LSTAT,y=Predicted, color="Predicted Points"))+
+  geom_point(data=dfrf,
+             aes(x=LSTAT,y=Actual,color="Actual Points"))+
+  geom_line(data=dfrf,
+            aes(x=LSTAT,y=Predicted,color="predicted Line"))+
+  labs(y="Predicted MEDV", x= "LSTAT")
+```
+
+
+## Create data frame to compare R-squared values
+
+```{r}
+rsquared_df <- data.frame(Model = c("Linear Regression", "Support Vector Regression", 
+                                     "Random Forest Regression"),
+                          R_Squared = c(lm_rsquared, svr_rsquared, rf_rsquared))
+
+rsquared_df %>% arrange(desc(R_Squared))
+print(rsquared_df)
+```
+
+
+# Create data frame to compare MSE values
+
+```{r}
+mse_df <- data.frame(Model = c("Linear Regression","Support Vector Regression",
+                               "Random Forest Regression"),
+                     mse = c(lm_mse,svr_mse,rf_mse))
+
+mse_df %>% arrange(desc(mse))
+print(mse_df)
+```
+
+
+## Summary MSE and R-Squared value
+
+```{r}
+Comparison_df<- cbind(rsquared_df,MSE=mse_df$mse)
+print(Comparison_df)
+```
+
+The findings consist of the evaluation metrics (R-squared and Mean squared error) for three different regression models. The best-performing models in terms of R-squared is Support Vector Regression with high R-Squared value. In terms of mean squared error, Random Forest Regression model is the best-performing model for lowest MSE value. But their suitability depends on the specific problem being addressed where R-Squared value is not even more than 50% for any model. So not any model can perfectly predict target variable (Housing prices of Boston).
+
+Overall, the choice of model will depend on multiple factors, and should not be based solely on these performance metrics. 
